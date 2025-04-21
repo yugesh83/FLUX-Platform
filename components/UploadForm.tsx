@@ -34,7 +34,11 @@ const UploadForm = () => {
       "state_changed",
       null,
       (err) => {
-        setError("Error uploading image: " + err.message);
+        let errorMessage = "Error uploading image";
+        if (err instanceof Error) {
+          errorMessage += ": " + err.message;
+        }
+        setError(errorMessage);
         setLoading(false);
       },
       async () => {
@@ -56,7 +60,11 @@ const UploadForm = () => {
           setImage(null); // Clear the file input
           setError(""); // Clear any error message
         } catch (err) {
-          setError("Error uploading project: " + err.message);
+          let errorMessage = "Error uploading project";
+          if (err instanceof Error) {
+            errorMessage += ": " + err.message;
+          }
+          setError(errorMessage);
           setLoading(false);
         }
       }

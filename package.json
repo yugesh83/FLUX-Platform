@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@firebase/storage": "^0.13.7",
     "@react-firebase/auth": "^0.2.10",
     "firebase": "^11.6.0",
     "firebase-admin": "^13.2.0",
