@@ -1,3 +1,4 @@
+// app/dashboard/engineer/page.tsx
 "use client";
 import React, { useEffect, useState } from "react";
 import { db } from "../../../lib/firebase-config";
@@ -14,7 +15,7 @@ type Project = {
   sparks?: number;
 };
 
-export default function UserTypePage() {
+export default function EngineerDashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -38,6 +39,25 @@ export default function UserTypePage() {
   return (
     <div className="p-6 min-h-screen bg-[#f0fdf4] text-gray-900">
       <h1 className="text-3xl font-bold mb-6 text-center">Engineer Dashboard</h1>
+
+      {/* Action Buttons */}
+      <div className="flex flex-col sm:flex-row justify-center gap-4 mb-8">
+        <Link href="/upload">
+          <button className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-2 rounded-lg transition">
+            🔼 Upload Project
+          </button>
+        </Link>
+        <Link href="/profile">
+          <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg transition">
+            👤 Your Profile
+          </button>
+        </Link>
+        <Link href="/project-board">
+          <button className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-2 rounded-lg transition">
+            📋 Project Board
+          </button>
+        </Link>
+      </div>
 
       {/* Search Bar */}
       <input
