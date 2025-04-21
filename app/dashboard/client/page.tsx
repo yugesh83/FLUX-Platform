@@ -54,6 +54,10 @@ export default function ClientDashboard() {
                 src={project.imageUrl || "/placeholder.png"}
                 alt={project.name}
                 className="w-full h-40 object-cover rounded-md mb-4"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = "/placeholder.png";
+                }}
               />
               <h2 className="text-xl font-semibold">{project.name}</h2>
               <p className="text-gray-600 text-sm mb-2">By: {project.uploaderName}</p>
