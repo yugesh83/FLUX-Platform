@@ -1,0 +1,44 @@
+{
+  "compilerOptions": {
+    "target": "ES6",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "./dist",
+    "rootDir": "./",  // Add this line to specify the root directory
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "noEmit": true,
+    "incremental": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": ".",  // Set the base directory to the project root
+    "paths": {
+      "@/*": ["*", "lib/*"]  // Ensure path resolves to lib as well
+    }
+  },
+  "include": [
+    "src/**/*",
+    "lib/**/*",  // Include the lib folder to handle files in it
+    "types/**/*.d.ts",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
+
+
