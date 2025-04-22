@@ -1,33 +1,27 @@
 import React from "react";
 
-type ProjectCardProps = {
-  name: string;
-  uploaderName: string;
-  imageUrl?: string;
-  description: string;
-  onClick?: () => void;
-};
+// Define the type for the project prop
+export interface ProjectCardProps {
+  project: {
+    id: string;
+    title: string;
+    description: string;
+    imageUrl?: string;
+    uid: string;
+    createdAt: any; // Or use a specific type for Firebase timestamps if needed
+  };
+}
 
-const ProjectCard: React.FC<ProjectCardProps> = ({
-  name,
-  uploaderName,
-  imageUrl,
-  description,
-  onClick,
-}) => {
+const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
   return (
-    <div
-      className="bg-white p-4 rounded-xl shadow hover:shadow-lg transition cursor-pointer"
-      onClick={onClick}
-    >
+    <div className="bg-white rounded-lg shadow-md p-4">
       <img
-        src={imageUrl || "/placeholder.png"}
-        alt={name}
-        className="w-full h-40 object-cover rounded-lg mb-4"
+        src={project.imageUrl || "/placeholder.png"}
+        alt={project.title}
+        className="w-full h-48 object-cover rounded-md"
       />
-      <h2 className="text-lg font-bold text-gray-800">{name}</h2>
-      <p className="text-sm text-gray-600">By {uploaderName}</p>
-      <p className="text-gray-500 mt-2 line-clamp-2">{description}</p>
+      <h3 className="text-lg font-semibold mt-4">{project.title}</h3>
+      <p className="text-gray-500 mt-2">{project.description}</p>
     </div>
   );
 };

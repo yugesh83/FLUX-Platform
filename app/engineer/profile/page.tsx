@@ -3,14 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/firebase/config";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  doc,
-  getDoc,
-} from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import ProjectCard from "@/components/ProjectCard";
 import Link from "next/link";
@@ -26,6 +19,7 @@ export default function EngineerProfilePage() {
       if (currentUser) {
         setUser(currentUser);
 
+        // Fetch the user's profile details from Firestore
         const profileRef = doc(db, "engineers", currentUser.uid);
         const profileSnap = await getDoc(profileRef);
 
@@ -33,6 +27,7 @@ export default function EngineerProfilePage() {
           setProfile(profileSnap.data());
         }
 
+        // Fetch the user's uploaded projects from Firestore
         const q = query(
           collection(db, "projects"),
           where("uid", "==", currentUser.uid)
@@ -73,12 +68,6 @@ export default function EngineerProfilePage() {
         <p><strong>Email:</strong> {user.email}</p>
       </div>
 
-      {/* Future Section: Collaboration Requests */}
-      <div className="bg-white rounded-xl shadow-md p-6 mb-10">
-        <h2 className="text-xl font-bold mb-3">Collaboration Requests</h2>
-        <p>Coming soon...</p>
-      </div>
-
       {/* User's Own Projects */}
       <div className="bg-white rounded-xl shadow-md p-6">
         <h2 className="text-xl font-bold mb-6">Your Uploaded Projects</h2>
@@ -87,17 +76,19 @@ export default function EngineerProfilePage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
             {projects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                name={project.name}
-                uploaderName={project.uploaderName}
-                imageUrl={project.imageUrls?.[0]}
-                description={project.description}
-                onClick={() => router.push(`/project/${project.id}`)}
-              />
+              <ProjectCard key={project.id} project={project} />
             ))}
           </div>
         )}
+      </div>
+
+      <div className="bg-white rounded-xl shadow-md p-6 mt-10">
+        <Link
+          href="/create/profile"
+          className="text-green-500 text-lg font-semibold hover:text-green-600"
+        >
+          Edit Profile
+        </Link>
       </div>
     </div>
   );

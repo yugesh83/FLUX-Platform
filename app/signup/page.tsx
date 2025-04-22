@@ -1,11 +1,10 @@
-// signup/page.tsx
-
 "use client";
+
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/firebase/config";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
@@ -19,26 +18,31 @@ export default function SignupPage() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      
-      // Save user data to Firestore
+
+      // Save basic user data to Firestore in "users" collection
       await setDoc(doc(db, "users", user.uid), {
         email: user.email,
         createdAt: new Date(),
       });
 
-      // Set signup success state
-      setIsSignedUp(true);
+      // Check if engineer profile already exists
+      const profileRef = doc(db, "engineers", user.uid);
+      const profileSnap = await getDoc(profileRef);
 
-      // Redirect to dashboard or another page after a delay
+      setIsSignedUp(true); // Show thank you message
+
       setTimeout(() => {
-        router.push("/dashboard");
-      }, 2000); // Wait 2 seconds before redirecting
+        if (!profileSnap.exists()) {
+          router.push("/profile/create/page"); // Go to profile creation
+        } else {
+          router.push("/profile/page"); // Just in case they already have profile
+        }
+      }, 2000);
     } catch (error: unknown) {
-      // Handle error with type checking
       if (error instanceof Error) {
         console.error(error.message);
       } else {
-        console.error('An unknown error occurred');
+        console.error("An unknown error occurred");
       }
     }
   };
@@ -48,7 +52,6 @@ export default function SignupPage() {
       <div className="w-full max-w-md p-8 bg-white shadow-md rounded-lg">
         <h2 className="text-3xl font-bold text-gray-800 text-center mb-6">Create an Account</h2>
 
-        {/* Thank You Message on successful signup */}
         {isSignedUp && (
           <div className="text-center text-green-500 mb-4">
             <p>Thank you for joining FLUX! We are excited to have you!</p>
@@ -82,7 +85,9 @@ export default function SignupPage() {
             />
           </div>
 
-          <button type="submit" className="w-full p-3 bg-green-500 text-white font-semibold rounded-md">Sign Up</button>
+          <button type="submit" className="w-full p-3 bg-green-500 text-white font-semibold rounded-md">
+            Sign Up
+          </button>
         </form>
       </div>
     </div>
