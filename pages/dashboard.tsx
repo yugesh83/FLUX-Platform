@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import ProjectFeed from "components/ProjectFeed";  // Updated import path
 import UploadForm from "components/UploadForm";  // Updated import path
-import { db } from "lib/firebase-config";  // Updated import path
+import { db } from "@/firebase/config";  // Updated import path
 import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 
 type Project = {

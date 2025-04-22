@@ -8,7 +8,7 @@ import {
   query,
   orderBy,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase-config";
+import { db } from "@/firebase/config";
 
 interface CommentSectionProps {
   projectId: string;

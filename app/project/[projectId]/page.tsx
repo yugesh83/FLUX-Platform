@@ -9,7 +9,7 @@ import {
   addDoc,
   updateDoc,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase-config";
+import { db } from "@/firebase/config";
 
 type Project = {
   name: string;

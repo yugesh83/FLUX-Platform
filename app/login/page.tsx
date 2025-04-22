@@ -1,5 +1,5 @@
 "use client"; // Required for interactivity
-import { auth } from "@/lib/firebase-config";
+import { auth } from "@/firebase/config";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
 import { useRouter } from "next/navigation";

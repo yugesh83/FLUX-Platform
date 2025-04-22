@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { db, storage, auth } from "../../lib/firebase-config";
+import { db, storage, auth } from "../../firebase/config";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { v4 as uuidv4 } from "uuid";

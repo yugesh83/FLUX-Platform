@@ -14,7 +14,7 @@
         "./*"
       ],
       "@/lib/*": [
-        "./lib/*"
+        "firebase/*"
       ] // Explicit path for Firebase files
     },
     "strict": true,

@@ -3,7 +3,7 @@
 "use client";
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { auth, db } from "@/lib/firebase-config";
+import { auth, db } from "@/firebase/config";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 
