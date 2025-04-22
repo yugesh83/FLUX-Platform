@@ -3,7 +3,6 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase-config";
-import Image from "next/image";
 
 type Project = {
   name: string;
@@ -21,15 +20,16 @@ type Comment = {
 };
 
 export default function ProjectPage() {
-    const params = useParams();
-    const projectId = params?.projectId as string;    
+  const params = useParams();
+  const projectId = params?.projectId as string;
+
   const [project, setProject] = useState<Project | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [selectedImage, setSelectedImage] = useState<string>("");
 
   useEffect(() => {
     const fetchProject = async () => {
-      const docRef = doc(db, "projects", projectId as string);
+      const docRef = doc(db, "projects", projectId);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         const data = docSnap.data() as Project;
@@ -39,9 +39,9 @@ export default function ProjectPage() {
     };
 
     const fetchComments = async () => {
-      const commentRef = collection(db, "projects", projectId as string, "comments");
+      const commentRef = collection(db, "projects", projectId, "comments");
       const commentSnap = await getDocs(commentRef);
-      const commentData = commentSnap.docs.map(doc => ({
+      const commentData = commentSnap.docs.map((doc) => ({
         id: doc.id,
         ...(doc.data() as Omit<Comment, "id">),
       }));
@@ -62,10 +62,15 @@ export default function ProjectPage() {
           <h1 className="text-3xl font-bold text-gray-800">{project.name}</h1>
 
           <div className="bg-white p-4 rounded-lg shadow">
-            <h2 className="text-xl font-semibold text-gray-700">{project.uploaderName}</h2>
+            <h2 className="text-xl font-semibold text-gray-700">
+              {project.uploaderName}
+            </h2>
             <p className="text-gray-500">{project.specialty || "Specialty not provided"}</p>
             <p className="text-sm text-gray-400 mt-1">
-              Posted on: {new Date(project.createdAt?.seconds * 1000).toDateString()}
+              Posted on:{" "}
+              {project.createdAt?.seconds
+                ? new Date(project.createdAt.seconds * 1000).toDateString()
+                : "Unknown"}
             </p>
 
             <div className="flex gap-4 mt-6">
@@ -81,9 +86,9 @@ export default function ProjectPage() {
 
         {/* Right Panel - Image Gallery */}
         <div className="lg:col-span-2">
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             {/* Thumbnail reel */}
-            <div className="flex flex-col gap-2">
+            <div className="flex sm:flex-col gap-2 overflow-x-auto sm:overflow-y-auto">
               {(project.imageUrls?.length ? project.imageUrls : ["/placeholder.png"]).map((img, i) => (
                 <img
                   key={i}
@@ -92,7 +97,7 @@ export default function ProjectPage() {
                     selectedImage === img ? "border-green-500" : "border-gray-300"
                   }`}
                   onClick={() => setSelectedImage(img)}
-                  alt="thumbnail"
+                  alt={`thumbnail-${i}`}
                 />
               ))}
             </div>
@@ -119,7 +124,9 @@ export default function ProjectPage() {
       <div className="max-w-7xl mx-auto bg-white mt-6 p-6 rounded-lg shadow">
         <h3 className="text-xl font-bold mb-4 text-gray-800">Comments</h3>
         {comments.length === 0 ? (
-          <p className="text-gray-500">No comments yet. Be the first to support this project!</p>
+          <p className="text-gray-500">
+            No comments yet. Be the first to support this project!
+          </p>
         ) : (
           <div className="space-y-4">
             {comments.map((comment) => (
