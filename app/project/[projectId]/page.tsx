@@ -1,7 +1,14 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  getDocs,
+  addDoc,
+  updateDoc,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase-config";
 
 type Project = {
@@ -10,6 +17,7 @@ type Project = {
   specialty: string;
   createdAt: any;
   description: string;
+  sparks?: number;
   imageUrls?: string[];
 };
 
@@ -26,6 +34,43 @@ export default function ProjectPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [selectedImage, setSelectedImage] = useState<string>("");
+  const [newCommentText, setNewCommentText] = useState("");
+  const [authorName, setAuthorName] = useState("");
+
+  const fetchComments = async () => {
+    const commentRef = collection(db, "projects", projectId, "comments");
+    const commentSnap = await getDocs(commentRef);
+    const commentData = commentSnap.docs.map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<Comment, "id">),
+    }));
+    setComments(commentData);
+  };
+
+  const handleSpark = async () => {
+    if (!project) return;
+    const newSparkCount = (project.sparks || 0) + 1;
+    setProject({ ...project, sparks: newSparkCount });
+
+    const projectRef = doc(db, "projects", projectId);
+    await updateDoc(projectRef, {
+      sparks: newSparkCount,
+    });
+  };
+
+  const handleSubmitComment = async () => {
+    if (!newCommentText.trim() || !authorName.trim()) return;
+
+    const commentRef = collection(db, "projects", projectId, "comments");
+    await addDoc(commentRef, {
+      text: newCommentText,
+      author: authorName,
+    });
+
+    setNewCommentText("");
+    setAuthorName("");
+    fetchComments(); // Refresh comments
+  };
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -36,16 +81,6 @@ export default function ProjectPage() {
         setProject(data);
         setSelectedImage(data.imageUrls?.[0] || "/placeholder.png");
       }
-    };
-
-    const fetchComments = async () => {
-      const commentRef = collection(db, "projects", projectId, "comments");
-      const commentSnap = await getDocs(commentRef);
-      const commentData = commentSnap.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<Comment, "id">),
-      }));
-      setComments(commentData);
     };
 
     fetchProject();
@@ -65,16 +100,24 @@ export default function ProjectPage() {
             <h2 className="text-xl font-semibold text-gray-700">
               {project.uploaderName}
             </h2>
-            <p className="text-gray-500">{project.specialty || "Specialty not provided"}</p>
+            <p className="text-gray-500">
+              {project.specialty || "Specialty not provided"}
+            </p>
             <p className="text-sm text-gray-400 mt-1">
               Posted on:{" "}
               {project.createdAt?.seconds
                 ? new Date(project.createdAt.seconds * 1000).toDateString()
                 : "Unknown"}
             </p>
+            <p className="text-sm text-yellow-600 mt-2 font-semibold">
+              {project.sparks ?? 0} ⚡ SPARKS
+            </p>
 
             <div className="flex gap-4 mt-6">
-              <button className="bg-green-500 text-black px-4 py-2 rounded-full flex items-center font-semibold hover:bg-green-600 transition">
+              <button
+                onClick={handleSpark}
+                className="bg-green-500 text-black px-4 py-2 rounded-full flex items-center font-semibold hover:bg-green-600 transition"
+              >
                 SPARK <span className="ml-2 text-orange-600">⚡</span>
               </button>
               <button className="bg-indigo-500 text-white px-4 py-2 rounded-full hover:bg-indigo-600 transition">
@@ -89,12 +132,17 @@ export default function ProjectPage() {
           <div className="flex flex-col sm:flex-row gap-4">
             {/* Thumbnail reel */}
             <div className="flex sm:flex-col gap-2 overflow-x-auto sm:overflow-y-auto">
-              {(project.imageUrls?.length ? project.imageUrls : ["/placeholder.png"]).map((img, i) => (
+              {(project.imageUrls?.length
+                ? project.imageUrls
+                : ["/placeholder.png"]
+              ).map((img, i) => (
                 <img
                   key={i}
                   src={img}
                   className={`w-20 h-20 object-cover rounded cursor-pointer border ${
-                    selectedImage === img ? "border-green-500" : "border-gray-300"
+                    selectedImage === img
+                      ? "border-green-500"
+                      : "border-gray-300"
                   }`}
                   onClick={() => setSelectedImage(img)}
                   alt={`thumbnail-${i}`}
@@ -116,13 +164,40 @@ export default function ProjectPage() {
 
       {/* Description */}
       <div className="max-w-7xl mx-auto bg-white mt-10 p-6 rounded-lg shadow">
-        <h2 className="text-2xl font-bold mb-2 text-gray-800">Project Description</h2>
+        <h2 className="text-2xl font-bold mb-2 text-gray-800">
+          Project Description
+        </h2>
         <p className="text-gray-700">{project.description}</p>
       </div>
 
       {/* Comments */}
       <div className="max-w-7xl mx-auto bg-white mt-6 p-6 rounded-lg shadow">
         <h3 className="text-xl font-bold mb-4 text-gray-800">Comments</h3>
+
+        {/* Input box */}
+        <div className="mb-6 space-y-2">
+          <input
+            type="text"
+            placeholder="Your name"
+            value={authorName}
+            onChange={(e) => setAuthorName(e.target.value)}
+            className="w-full border p-2 rounded"
+          />
+          <textarea
+            placeholder="Write a comment..."
+            value={newCommentText}
+            onChange={(e) => setNewCommentText(e.target.value)}
+            className="w-full border p-2 rounded"
+            rows={3}
+          />
+          <button
+            onClick={handleSubmitComment}
+            className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition"
+          >
+            Post Comment
+          </button>
+        </div>
+
         {comments.length === 0 ? (
           <p className="text-gray-500">
             No comments yet. Be the first to support this project!
