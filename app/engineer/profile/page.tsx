@@ -1,123 +1,107 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getAuth } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase-config";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { getFirestore, doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { app } from "@/firebase/config";
 
 export default function EngineerProfilePage() {
+  const auth = getAuth(app);
+  const db = getFirestore(app);
   const router = useRouter();
-  const auth = getAuth();
-  const user = auth.currentUser;
-  const uid = user?.uid;
 
-  const [name, setName] = useState("");
-  const [specialty, setSpecialty] = useState("");
-  const [bio, setBio] = useState("");
-  const [isFirstVisit, setIsFirstVisit] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState({ name: "", specialty: "" });
+  const [projects, setProjects] = useState([]);
+  const [uid, setUid] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!uid) return;
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setUid(user.uid);
+        const profileRef = doc(db, "users", user.uid);
+        const profileSnap = await getDoc(profileRef);
 
-    const fetchProfile = async () => {
-      const docRef = doc(db, "users", uid);
-      const docSnap = await getDoc(docRef);
+        if (profileSnap.exists()) {
+          setUserProfile(profileSnap.data() as any);
+        }
 
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setName(data.name || "");
-        setSpecialty(data.specialty || "");
-        setBio(data.bio || "");
-        setIsFirstVisit(false);
+        const q = query(collection(db, "projects"), where("userId", "==", user.uid));
+        const querySnapshot = await getDocs(q);
+        const fetchedProjects = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setProjects(fetchedProjects as any);
       } else {
-        setIsFirstVisit(true);
+        router.push("/signup");
       }
+    });
 
-      setLoading(false);
-    };
-
-    fetchProfile();
-  }, [uid]);
-
-  const handleSave = async () => {
-    if (!uid || !name || !specialty) return alert("Name and Specialty are required.");
-
-    const docRef = doc(db, "users", uid);
-    await setDoc(docRef, { name, specialty, bio }, { merge: true });
-
-    setIsFirstVisit(false);
-    alert("Profile saved successfully!");
-  };
-
-  if (loading) return <div className="p-6 text-center">Loading...</div>;
+    return () => unsubscribe();
+  }, []);
 
   return (
-    <div className="min-h-screen bg-[#f0fdf4] p-8">
-      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow p-6 space-y-6">
+    <div className="min-h-screen bg-[#f0fdf4] py-10 px-6">
+      <div className="max-w-7xl mx-auto space-y-10">
+
+        {/* Header */}
         <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-800">Engineer Profile</h1>
+          <h1 className="text-4xl font-bold text-gray-800">Engineer Profile</h1>
           <button
-            onClick={() => router.push("/engineer/dashboard")}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+            onClick={() => router.push("/dashboard/engineer")}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
           >
             Go to Dashboard
           </button>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="font-semibold block mb-1">Name*</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded"
-              placeholder="Your full name"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="font-semibold block mb-1">Specialty / Degree*</label>
-            <input
-              type="text"
-              value={specialty}
-              onChange={(e) => setSpecialty(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded"
-              placeholder="e.g., B.Tech in Mechanical Engineering"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="font-semibold block mb-1">Short Bio (optional)</label>
-            <textarea
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded"
-              rows={3}
-              placeholder="Tell us a little about yourself"
-            />
-          </div>
+        {/* Profile Section */}
+        <div className="bg-white rounded-2xl shadow p-6 space-y-2">
+          <h2 className="text-2xl font-semibold text-gray-800">Profile Details</h2>
+          <p className="text-gray-700"><strong>Name:</strong> {userProfile.name}</p>
+          <p className="text-gray-700"><strong>Specialty:</strong> {userProfile.specialty}</p>
+          <button
+            className="mt-3 text-indigo-600 hover:underline"
+            onClick={() => router.push("/users/edit-profile")}
+          >
+            Edit Profile
+          </button>
         </div>
 
-        <button
-          onClick={handleSave}
-          className="bg-indigo-600 text-white font-semibold px-6 py-2 rounded hover:bg-indigo-700"
-        >
-          {isFirstVisit ? "Save Profile" : "Update Profile"}
-        </button>
+        {/* Collab Requests */}
+        <div className="bg-white rounded-2xl shadow p-6">
+          <h2 className="text-2xl font-semibold text-gray-800 mb-2">Collaboration Requests</h2>
+          <p className="text-gray-500">You don't have any requests yet. Coming soon!</p>
+        </div>
 
-        {!isFirstVisit && (
-          <div className="mt-6">
-            <h2 className="text-xl font-bold mb-2 text-gray-700">Your Projects</h2>
-            <p className="text-gray-500">Coming soon: All your uploaded projects will appear here.</p>
-
-            <h2 className="text-xl font-bold mt-6 mb-2 text-gray-700">Collaboration Requests</h2>
-            <p className="text-gray-500">Coming soon: Any requests to collaborate on projects will be shown here.</p>
-          </div>
-        )}
+        {/* Project Grid */}
+        <div className="bg-white rounded-2xl shadow p-6">
+          <h2 className="text-2xl font-semibold text-gray-800 mb-4">Your Uploaded Projects</h2>
+          {projects.length === 0 ? (
+            <p className="text-gray-500">No projects uploaded yet.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {projects.map((project: any) => (
+                <div key={project.id} className="bg-[#f0fdf4] p-4 rounded-xl shadow hover:shadow-md transition">
+                  <img
+                    src={project.imageUrls?.[0] || "/placeholder.png"}
+                    alt="Project"
+                    className="w-full h-40 object-cover rounded-lg mb-3"
+                  />
+                  <h3 className="text-lg font-semibold text-gray-800">{project.name}</h3>
+                  <p className="text-gray-500 text-sm truncate">{project.description}</p>
+                  <button
+                    onClick={() => router.push(`/project/${project.id}`)}
+                    className="mt-2 text-green-600 hover:underline"
+                  >
+                    View Project
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
