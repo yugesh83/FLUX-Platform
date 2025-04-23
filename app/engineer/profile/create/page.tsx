@@ -33,7 +33,7 @@ export default function ProfileCreationPage() {
         });
 
         // Redirect to the engineer profile page after saving
-        router.push("/profile/page");
+        router.push("/engineer/profile");
       } else {
         alert("No user logged in.");
         router.push("/login");
