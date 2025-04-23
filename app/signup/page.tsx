@@ -9,6 +9,7 @@ import { doc, setDoc, getDoc } from "firebase/firestore";
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"engineer" | "client">("engineer");
   const [isSignedUp, setIsSignedUp] = useState(false);
   const router = useRouter();
 
@@ -16,34 +17,31 @@ export default function SignupPage() {
     e.preventDefault();
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+      const { user } = await createUserWithEmailAndPassword(auth, email, password);
 
-      // Save basic user data to Firestore in "users" collection
+      // Save basic user data + role to "users"
       await setDoc(doc(db, "users", user.uid), {
         email: user.email,
+        role,
         createdAt: new Date(),
       });
 
-      // Check if engineer profile already exists
-      const profileRef = doc(db, "engineers", user.uid);
-      const profileSnap = await getDoc(profileRef);
+      // Pre-create empty profile in engineers or clients
+      const coll = role === "engineer" ? "engineers" : "clients";
+      await setDoc(doc(db, coll, user.uid), { uid: user.uid });
 
-      setIsSignedUp(true); // Show thank you message
+      setIsSignedUp(true);
 
-      setTimeout(() => {
-        if (!profileSnap.exists()) {
-          router.push("/profile/create/page"); // Go to profile creation
+      setTimeout(async () => {
+        if (role === "engineer") {
+          router.push("/profile/create/page");
         } else {
-          router.push("/profile/page"); // Just in case they already have profile
+          router.push("/client/profile/create");
         }
       }, 2000);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        console.error(error.message);
-      } else {
-        console.error("An unknown error occurred");
-      }
+    } catch (err) {
+      console.error(err);
+      alert("Signup failed – check console for details.");
     }
   };
 
@@ -54,38 +52,69 @@ export default function SignupPage() {
 
         {isSignedUp && (
           <div className="text-center text-green-500 mb-4">
-            <p>Thank you for joining FLUX! We are excited to have you!</p>
+            <p>Thank you for joining FLUX! 🎉</p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="mb-4">
-            <label htmlFor="email" className="block text-sm font-medium text-gray-600">Email</label>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
             <input
               type="email"
               id="email"
-              className="w-full mt-2 p-3 border border-gray-300 rounded-md text-gray-800"
+              className="w-full mt-2 p-3 border border-gray-300 rounded-md text-gray-800 placeholder-gray-500"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={e => setEmail(e.target.value)}
               placeholder="Enter your email"
               required
             />
           </div>
 
           <div className="mb-4">
-            <label htmlFor="password" className="block text-sm font-medium text-gray-600">Password</label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
             <input
               type="password"
               id="password"
-              className="w-full mt-2 p-3 border border-gray-300 rounded-md text-gray-800"
+              className="w-full mt-2 p-3 border border-gray-300 rounded-md text-gray-800 placeholder-gray-500"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={e => setPassword(e.target.value)}
               placeholder="Create a password"
               required
             />
           </div>
 
-          <button type="submit" className="w-full p-3 bg-green-500 text-white font-semibold rounded-md">
+          <fieldset className="mb-4">
+            <legend className="block text-sm font-medium text-gray-700 mb-2">I am a:</legend>
+            <div className="flex space-x-6">
+              <label className="flex items-center text-gray-800">
+                <input
+                  type="radio"
+                  name="role"
+                  value="engineer"
+                  checked={role === "engineer"}
+                  onChange={() => setRole("engineer")}
+                  className="form-radio text-green-500"
+                />
+                <span className="ml-2">Engineer</span>
+              </label>
+              <label className="flex items-center text-gray-800">
+                <input
+                  type="radio"
+                  name="role"
+                  value="client"
+                  checked={role === "client"}
+                  onChange={() => setRole("client")}
+                  className="form-radio text-green-500"
+                />
+                <span className="ml-2">Client</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <button
+            type="submit"
+            className="w-full p-3 bg-green-500 text-white font-semibold rounded-md hover:bg-green-600 transition"
+          >
             Sign Up
           </button>
         </form>
