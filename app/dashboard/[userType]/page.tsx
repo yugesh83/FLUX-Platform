@@ -52,7 +52,7 @@ export default function EngineerDashboard() {
             👤 Your Profile
           </button>
         </Link>
-        <Link href="/project-board">
+        <Link href="/engineer/project-board">
           <button className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-2 rounded-lg transition">
             📋 Project Board
           </button>

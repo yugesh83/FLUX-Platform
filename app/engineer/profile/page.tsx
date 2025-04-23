@@ -3,7 +3,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/firebase/config";
-import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import ProjectCard from "@/components/ProjectCard";
 import Link from "next/link";
@@ -13,6 +21,10 @@ export default function EngineerProfilePage() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [projects, setProjects] = useState<any[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [specialtyInput, setSpecialtyInput] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -23,7 +35,10 @@ export default function EngineerProfilePage() {
         const profileSnap = await getDoc(profileRef);
 
         if (profileSnap.exists()) {
-          setProfile(profileSnap.data());
+          const profileData = profileSnap.data();
+          setProfile(profileData);
+          setNameInput(profileData.name || "");
+          setSpecialtyInput(profileData.specialty || "");
         }
 
         const q = query(
@@ -45,6 +60,25 @@ export default function EngineerProfilePage() {
     return () => unsubscribe();
   }, []);
 
+  const handleSave = async () => {
+    if (!nameInput || !specialtyInput || !user) return;
+    setIsSaving(true);
+    try {
+      const profileRef = doc(db, "engineers", user.uid);
+      await setDoc(profileRef, {
+        name: nameInput,
+        specialty: specialtyInput,
+        updatedAt: new Date(),
+      });
+      setProfile({ name: nameInput, specialty: specialtyInput });
+      setEditing(false);
+    } catch (err) {
+      console.error("Error updating profile:", err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -52,7 +86,7 @@ export default function EngineerProfilePage() {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-semibold">Your Profile</h1>
         <Link
-          href="/engineer/dashboard"
+          href="/dashboard/engineer"
           className="bg-green-500 text-white px-4 py-2 rounded-lg shadow hover:bg-green-600"
         >
           Go to Dashboard
@@ -61,9 +95,62 @@ export default function EngineerProfilePage() {
 
       <div className="bg-white rounded-xl shadow-md p-6 mb-10 space-y-3">
         <h2 className="text-xl font-bold mb-3">Profile Information</h2>
-        <p className="text-gray-700"><strong>Name:</strong> {profile?.name || "N/A"}</p>
-        <p className="text-gray-700"><strong>Specialty / Degree:</strong> {profile?.specialty || "N/A"}</p>
-        <p className="text-gray-700"><strong>Email:</strong> {user.email}</p>
+
+        {editing ? (
+          <>
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-gray-600">Name</label>
+              <input
+                type="text"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                className="w-full mt-1 p-2 border border-gray-300 rounded"
+              />
+            </div>
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-gray-600">Specialty / Degree</label>
+              <input
+                type="text"
+                value={specialtyInput}
+                onChange={(e) => setSpecialtyInput(e.target.value)}
+                className="w-full mt-1 p-2 border border-gray-300 rounded"
+              />
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 disabled:opacity-50"
+              >
+                {isSaving ? "Saving..." : "Save"}
+              </button>
+              <button
+                onClick={() => setEditing(false)}
+                className="text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-gray-700">
+              <strong>Name:</strong> {profile?.name || "N/A"}
+            </p>
+            <p className="text-gray-700">
+              <strong>Specialty / Degree:</strong> {profile?.specialty || "N/A"}
+            </p>
+            <p className="text-gray-700">
+              <strong>Email:</strong> {user.email}
+            </p>
+            <button
+              onClick={() => setEditing(true)}
+              className="text-green-500 text-lg font-semibold hover:text-green-600 mt-4"
+            >
+              Edit Profile
+            </button>
+          </>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-md p-6">
@@ -78,15 +165,7 @@ export default function EngineerProfilePage() {
           </div>
         )}
       </div>
-
-      <div className="bg-white rounded-xl shadow-md p-6 mt-10">
-        <Link
-          href="/create/profile"
-          className="text-green-500 text-lg font-semibold hover:text-green-600"
-        >
-          Edit Profile
-        </Link>
-      </div>
     </div>
   );
 }
+

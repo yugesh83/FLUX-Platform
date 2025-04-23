@@ -34,7 +34,7 @@ export default function SignupPage() {
 
       setTimeout(async () => {
         if (role === "engineer") {
-          router.push("/profile/create/page");
+          router.push("/engineer/profile/create");
         } else {
           router.push("/client/profile/create");
         }
