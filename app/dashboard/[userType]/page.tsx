@@ -1,8 +1,13 @@
-// app/dashboard/engineer/page.tsx
 "use client";
 import React, { useEffect, useState } from "react";
-import { db } from "../../../firebase/config";
-import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
+import { auth, db } from "../../../firebase/config";
+import {
+  collection,
+  onSnapshot,
+  query,
+  orderBy,
+  where,
+} from "firebase/firestore";
 import Link from "next/link";
 
 type Project = {
@@ -15,9 +20,16 @@ type Project = {
   sparks?: number;
 };
 
+type Chat = {
+  id: string;
+  projectId: string;
+  participants: string[];
+};
+
 export default function EngineerDashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [chats, setChats] = useState<Chat[]>([]);
 
   useEffect(() => {
     const q = query(collection(db, "projects"), orderBy("createdAt", "desc"));
@@ -27,6 +39,26 @@ export default function EngineerDashboard() {
         ...(doc.data() as Omit<Project, "id">),
       }));
       setProjects(projectsData);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    const chatsRef = query(
+      collection(db, "chats"),
+      where("participants", "array-contains", currentUser.uid)
+    );
+
+    const unsubscribe = onSnapshot(chatsRef, (snapshot) => {
+      const chatData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as Omit<Chat, "id">),
+      }));
+      setChats(chatData);
     });
 
     return () => unsubscribe();
@@ -58,6 +90,24 @@ export default function EngineerDashboard() {
           </button>
         </Link>
       </div>
+
+      {/* Chat Section */}
+      {chats.length > 0 && (
+        <div className="mb-10">
+          <h2 className="text-xl font-semibold mb-4 text-center">💬 Active Project Chats</h2>
+          <div className="flex flex-wrap justify-center gap-4">
+            {chats.map((chat) => (
+              <Link key={chat.id} href={`/project-chats/${chat.id}`}>
+                <div className="bg-white border border-gray-300 rounded-md px-4 py-2 shadow hover:shadow-md transition cursor-pointer">
+                  <p className="font-medium text-gray-800">
+                    Chat for Project: <span className="font-mono">{chat.projectId}</span>
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Search Bar */}
       <input
@@ -92,7 +142,3 @@ export default function EngineerDashboard() {
     </div>
   );
 }
-
-
-
-

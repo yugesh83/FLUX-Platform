@@ -8,8 +8,9 @@ import {
   doc,
   getDoc,
   getDocs,
-  updateDoc,
   setDoc,
+  addDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import Link from "next/link";
 
@@ -17,6 +18,7 @@ type Applicant = {
   engineerId: string;
   message?: string;
   approved?: boolean;
+  chatId?: string;
 };
 
 type EngineerInfo = {
@@ -57,23 +59,32 @@ export default function ApplicantsPage() {
   const handleApprove = async (engineerId: string) => {
     if (!projectId) return;
 
-    const requestRef = doc(db, "clientProjects", projectId, "requests", engineerId);
-    await setDoc(requestRef, { approved: true }, { merge: true });
-
     const currentUser = auth.currentUser;
     if (!currentUser) {
       alert("You must be logged in to approve requests.");
       return;
     }
 
-    const chatId = `${projectId}_${engineerId}`;
-    await setDoc(doc(db, "chats", chatId), {
+    const requestRef = doc(db, "clientProjects", projectId, "requests", engineerId);
+
+    // Step 1: Create a new chat doc with auto-generated ID
+    const chatDocRef = await addDoc(collection(db, "chats"), {
       participants: [engineerId, currentUser.uid],
       projectId,
-      createdAt: new Date(),
+      engineerId,
+      clientId: currentUser.uid,
+      createdAt: serverTimestamp(),
     });
 
-    router.push(`/project-chats/${chatId}`);
+    // Step 2: Update request with approved status and chatId
+    await setDoc(
+      requestRef,
+      { approved: true, chatId: chatDocRef.id },
+      { merge: true }
+    );
+
+    // Step 3: Redirect to chat
+    router.push(`/project-chats/${chatDocRef.id}`);
   };
 
   return (
@@ -139,4 +150,3 @@ export default function ApplicantsPage() {
     </div>
   );
 }
-
