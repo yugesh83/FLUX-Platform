@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
@@ -7,9 +8,9 @@ import {
   collection,
   getDocs,
   addDoc,
-  updateDoc,
 } from "firebase/firestore";
 import { db } from "@/firebase/config";
+import SparkButton from "@/components/SparkButton";
 
 type Project = {
   name: string;
@@ -45,17 +46,6 @@ export default function ProjectPage() {
       ...(doc.data() as Omit<Comment, "id">),
     }));
     setComments(commentData);
-  };
-
-  const handleSpark = async () => {
-    if (!project) return;
-    const newSparkCount = (project.sparks || 0) + 1;
-    setProject({ ...project, sparks: newSparkCount });
-
-    const projectRef = doc(db, "projects", projectId);
-    await updateDoc(projectRef, {
-      sparks: newSparkCount,
-    });
   };
 
   const handleSubmitComment = async () => {
@@ -114,12 +104,10 @@ export default function ProjectPage() {
             </p>
 
             <div className="flex gap-4 mt-6">
-              <button
-                onClick={handleSpark}
-                className="bg-green-500 text-black px-4 py-2 rounded-full flex items-center font-semibold hover:bg-green-600 transition"
-              >
-                SPARK <span className="ml-2 text-orange-600">⚡</span>
-              </button>
+              <SparkButton
+                projectId={projectId}
+                currentCount={project.sparks ?? 0}
+              />
               <button className="bg-indigo-500 text-white px-4 py-2 rounded-full hover:bg-indigo-600 transition">
                 Request to Collaborate
               </button>

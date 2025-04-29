@@ -8,29 +8,23 @@ import {
   getDocs,
   query,
   where,
-  addDoc,
-  Timestamp,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import Link from "next/link";
+import ClientPostForm from "@/components/ClientPostForm";
 
 type JobPost = {
   id: string;
   title: string;
   description: string;
   requiredSlots?: number;
-  createdAt: Timestamp;
+  createdAt: any;
 };
 
 export default function ClientDashboard() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [posts, setPosts] = useState<JobPost[]>([]);
-
-  // Form fields for posting a new job
-  const [requirementTitle, setRequirementTitle] = useState("");
-  const [requirementDescription, setRequirementDescription] = useState("");
-  const [requiredSlots, setRequiredSlots] = useState("");
 
   // 1) Watch auth and load only THIS client's posts
   useEffect(() => {
@@ -65,60 +59,7 @@ export default function ClientDashboard() {
 
       {/* Job Post Form */}
       <div className="max-w-2xl mx-auto mb-8">
-        <h2 className="text-xl font-semibold mb-4">Post a New Project Requirement</h2>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            if (!requirementTitle.trim() || !requirementDescription.trim()) {
-              alert("Please fill in all fields.");
-              return;
-            }
-            await addDoc(collection(db, "clientProjects"), {
-              title: requirementTitle,
-              description: requirementDescription,
-              requiredSlots: Number(requiredSlots) || 1,
-              clientId: user.uid,
-              createdAt: new Date(),
-            });
-            setRequirementTitle("");
-            setRequirementDescription("");
-            setRequiredSlots("");
-            alert("Project requirement posted!");
-            router.refresh(); // Refresh to show the new post
-          }}
-          className="bg-white p-6 rounded-xl shadow-md space-y-4"
-        >
-          <input
-            type="text"
-            placeholder="Project Title"
-            className="w-full border border-gray-300 rounded-md px-4 py-2"
-            value={requirementTitle}
-            onChange={(e) => setRequirementTitle(e.target.value)}
-            required
-          />
-          <textarea
-            placeholder="Project Description"
-            className="w-full border border-gray-300 rounded-md px-4 py-2"
-            value={requirementDescription}
-            onChange={(e) => setRequirementDescription(e.target.value)}
-            rows={4}
-            required
-          />
-          <input
-            type="number"
-            placeholder="Number of Engineers Needed"
-            className="w-full border border-gray-300 rounded-md px-4 py-2"
-            value={requiredSlots}
-            onChange={(e) => setRequiredSlots(e.target.value)}
-            min="1"
-          />
-          <button
-            type="submit"
-            className="w-full bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition"
-          >
-            Post Requirement
-          </button>
-        </form>
+        <ClientPostForm />
       </div>
 
       {/* Display existing job posts */}
@@ -139,7 +80,7 @@ export default function ClientDashboard() {
                 </p>
               )}
               <p className="text-xs text-gray-400 mb-4">
-                Posted on: {post.createdAt.toDate().toDateString()}
+                Posted on: {new Date(post.createdAt.seconds * 1000).toDateString()}
               </p>
 
               {/* View Applicants Button */}
