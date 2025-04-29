@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { auth, db } from "@/firebase/config";            // ← import auth
+import { auth, db } from "@/firebase/config";
 import {
   collection,
   doc,
@@ -34,12 +34,7 @@ export default function ApplicantsPage() {
     if (!projectId) return;
 
     const fetchApplicants = async () => {
-      const requestsRef = collection(
-        db,
-        "clientProjects",
-        projectId,
-        "requests"
-      );
+      const requestsRef = collection(db, "clientProjects", projectId, "requests");
       const requestSnapshot = await getDocs(requestsRef);
 
       const withEngineerData = await Promise.all(
@@ -62,24 +57,15 @@ export default function ApplicantsPage() {
   const handleApprove = async (engineerId: string) => {
     if (!projectId) return;
 
-    // Update the request's approved flag
-    const requestRef = doc(
-      db,
-      "clientProjects",
-      projectId,
-      "requests",
-      engineerId
-    );
-    await updateDoc(requestRef, { approved: true });
+    const requestRef = doc(db, "clientProjects", projectId, "requests", engineerId);
+    await setDoc(requestRef, { approved: true }, { merge: true });
 
-    // Determine current user (the client)
     const currentUser = auth.currentUser;
     if (!currentUser) {
       alert("You must be logged in to approve requests.");
       return;
     }
 
-    // Create a chat document for this engineer + client
     const chatId = `${projectId}_${engineerId}`;
     await setDoc(doc(db, "chats", chatId), {
       participants: [engineerId, currentUser.uid],
@@ -87,7 +73,6 @@ export default function ApplicantsPage() {
       createdAt: new Date(),
     });
 
-    // Redirect into the newly created chat
     router.push(`/project-chats/${chatId}`);
   };
 
@@ -98,7 +83,9 @@ export default function ApplicantsPage() {
       </h1>
 
       {applicants.length === 0 ? (
-        <p className="text-center text-gray-600">No engineers have applied yet.</p>
+        <p className="text-center text-gray-600">
+          No engineers have applied yet.
+        </p>
       ) : (
         <div className="space-y-4">
           {applicants.map((app) => (
@@ -108,7 +95,18 @@ export default function ApplicantsPage() {
             >
               <div className="flex justify-between items-center mb-2">
                 <div>
-                  <h2 className="text-lg font-semibold">{app.name}</h2>
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    {app.name}
+                    {app.approved ? (
+                      <span className="bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5 rounded">
+                        Approved
+                      </span>
+                    ) : (
+                      <span className="bg-orange-100 text-orange-800 text-xs font-semibold px-2.5 py-0.5 rounded">
+                        Pending Approval
+                      </span>
+                    )}
+                  </h2>
                   <p className="text-sm text-gray-600">
                     Specialty: {app.specialty}
                   </p>
