@@ -10,7 +10,6 @@ import {
   where,
   doc,
   getDoc,
-  or,
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -47,8 +46,9 @@ export default function EngineerChatsPage() {
 
       setUser(currentUser);
 
+      // Querying the collabChats collection instead of projectChats
       const q = query(
-        collection(db, "projectChats"),
+        collection(db, "collabChats"),
         where("participants", "array-contains", currentUser.uid)
       );
 
@@ -59,7 +59,7 @@ export default function EngineerChatsPage() {
       }));
       setChats(chatData);
 
-      // Fetch related info
+      // Fetch related info (client names and project titles)
       const clientNameMap: Record<string, string> = {};
       const projectTitleMap: Record<string, string> = {};
 
@@ -90,14 +90,14 @@ export default function EngineerChatsPage() {
 
   return (
     <div className="min-h-screen bg-[#f0fdf4] text-gray-900 px-6 py-8">
-      <h1 className="text-3xl font-bold text-center mb-8">💬 Active Project Chats</h1>
+      <h1 className="text-3xl font-bold text-center mb-8">💬 Active Collaboration Chats</h1>
 
       {chats.length === 0 ? (
-        <p className="text-center text-gray-600">You have no active chats yet.</p>
+        <p className="text-center text-gray-600">You have no active collaboration chats yet.</p>
       ) : (
         <div className="space-y-4 max-w-3xl mx-auto">
           {chats.map((chat) => (
-            <Link key={chat.id} href={`/project-chats/${chat.id}`}>
+            <Link key={chat.id} href={`/collab-chats/${chat.id}`}>
               <div className="bg-white p-5 rounded-lg shadow-md hover:shadow-lg transition cursor-pointer">
                 <h2 className="text-lg font-semibold mb-1">
                   Project: {projectTitles[chat.projectId] || "Untitled"}

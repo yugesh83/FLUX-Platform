@@ -10,115 +10,187 @@ import {
   where,
   doc,
   getDoc,
+  updateDoc,
+  arrayUnion,
+  orderBy,
+  limit,
+  Timestamp,
+  addDoc,
 } from "firebase/firestore";
-import { useRouter } from "next/navigation";
+import { useParams } from "next/navigation"; // ✅ Correct import
 import Link from "next/link";
+
+type Message = {
+  id: string;
+  senderId: string;
+  content: string;
+  timestamp: Timestamp;
+};
 
 type Chat = {
   id: string;
-  engineer1Id: string;
-  engineer2Id: string;
+  clientId: string;
   projectId: string;
-  lastMessage?: string;
+  participants: string[];
 };
 
-type EngineerInfo = {
+type User = {
   name: string;
+  uid: string;
 };
 
-type ProjectInfo = {
-  title: string;
-};
-
-export default function CollabChatsPage() {
+export default function CollabChatPage() {
   const [user, setUser] = useState<any>(null);
-  const [chats, setChats] = useState<Chat[]>([]);
-  const [engineerNames, setEngineerNames] = useState<Record<string, string>>({});
-  const [projectTitles, setProjectTitles] = useState<Record<string, string>>({});
-  const router = useRouter();
+  const [chat, setChat] = useState<Chat | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState<string>("");
+  const [clientInfo, setClientInfo] = useState<User | null>(null);
+
+  // ✅ Safely get chatId from useParams
+  const params = useParams();
+  const rawChatId = params?.["chatId"];
+  const chatIdStr = Array.isArray(rawChatId) ? rawChatId[0] : rawChatId ?? null;
+
+  // ✅ Guard clause
+  if (!chatIdStr) {
+    if (typeof window !== "undefined") {
+      window.location.href = "/engineer/chats";
+    }
+    return null;
+  }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
-        router.push("/login");
+        window.location.href = "/login";
+        return;
+      }
+      setUser(currentUser);
+
+      // Fetch chat
+      const chatRef = doc(db, "collabChats", chatIdStr);
+      const chatDoc = await getDoc(chatRef);
+
+      if (!chatDoc.exists()) {
+        window.location.href = "/engineer/chats";
         return;
       }
 
-      setUser(currentUser);
+      setChat({
+        id: chatDoc.id,
+        clientId: chatDoc.data().clientId,
+        projectId: chatDoc.data().projectId,
+        participants: chatDoc.data().participants || [],
+      });
 
-      const q = query(
-        collection(db, "collabChats"),
-        where("participants", "array-contains", currentUser.uid)
+      // Fetch messages
+      const messagesQuery = query(
+        collection(db, "collabChats", chatIdStr, "messages"),
+        orderBy("timestamp"),
+        limit(50)
       );
-
-      const snapshot = await getDocs(q);
-      const chatData = snapshot.docs.map((doc) => ({
+      const messagesSnapshot = await getDocs(messagesQuery);
+      const fetchedMessages = messagesSnapshot.docs.map((doc) => ({
         id: doc.id,
-        ...(doc.data() as Omit<Chat, "id">),
+        senderId: doc.data().senderId,
+        content: doc.data().content,
+        timestamp: doc.data().timestamp,
       }));
-      setChats(chatData);
+      setMessages(fetchedMessages);
 
-      const engineerNameMap: Record<string, string> = {};
-      const projectTitleMap: Record<string, string> = {};
-
-      for (const chat of chatData) {
-        const otherEngineerId =
-          chat.engineer1Id === currentUser.uid ? chat.engineer2Id : chat.engineer1Id;
-
-        if (otherEngineerId && !engineerNameMap[otherEngineerId]) {
-          const engineerDoc = await getDoc(doc(db, "users", otherEngineerId));
-          if (engineerDoc.exists()) {
-            engineerNameMap[otherEngineerId] = engineerDoc.data().name || "Engineer";
-          }
-        }
-
-        if (chat.projectId && !projectTitleMap[chat.projectId]) {
-          const projectDoc = await getDoc(doc(db, "projects", chat.projectId));
-          if (projectDoc.exists()) {
-            projectTitleMap[chat.projectId] = projectDoc.data().title || "Project";
-          }
-        }
+      // Fetch client info
+      const clientRef = doc(db, "users", chatDoc.data().clientId);
+      const clientSnapshot = await getDoc(clientRef);
+      if (clientSnapshot.exists()) {
+        setClientInfo({
+          name: clientSnapshot.data().name,
+          uid: chatDoc.data().clientId,
+        });
       }
-
-      setEngineerNames(engineerNameMap);
-      setProjectTitles(projectTitleMap);
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [chatIdStr]);
 
-  if (!user) return null;
+  const sendMessage = async () => {
+    if (newMessage.trim()) {
+      const message: Message = {
+        id: "",
+        senderId: user.uid,
+        content: newMessage,
+        timestamp: Timestamp.now(),
+      };
+
+      const messageRef = await addDoc(
+        collection(db, "collabChats", chatIdStr, "messages"),
+        message
+      );
+
+      await updateDoc(doc(db, "collabChats", chatIdStr), {
+        lastMessage: newMessage,
+        participants: arrayUnion(user.uid),
+      });
+
+      message.id = messageRef.id;
+
+      setNewMessage("");
+      setMessages((prevMessages) => [...prevMessages, message]);
+    }
+  };
+
+  if (!user || !chat || !clientInfo) return null;
 
   return (
     <div className="min-h-screen bg-[#f0fdf4] text-gray-900 px-6 py-8">
-      <h1 className="text-3xl font-bold text-center mb-8">🤝 Engineer Collaboration Chats</h1>
+      <h1 className="text-3xl font-bold text-center mb-8">💬 Collaboration Chat</h1>
 
-      {chats.length === 0 ? (
-        <p className="text-center text-gray-600">No active collaboration chats found.</p>
-      ) : (
-        <div className="space-y-4 max-w-3xl mx-auto">
-          {chats.map((chat) => {
-            const otherEngineerId =
-              chat.engineer1Id === user.uid ? chat.engineer2Id : chat.engineer1Id;
-
-            return (
-              <Link key={chat.id} href={`/project-chats/${chat.id}`}>
-                <div className="bg-white p-5 rounded-lg shadow-md hover:shadow-lg transition cursor-pointer">
-                  <h2 className="text-lg font-semibold mb-1">
-                    Project: {projectTitles[chat.projectId] || "Untitled"}
-                  </h2>
-                  <p className="text-sm text-gray-700 mb-1">
-                    Collaborating with: {engineerNames[otherEngineerId] || "Engineer"}
-                  </p>
-                  <p className="text-gray-600 text-sm">
-                    {chat.lastMessage || "No messages yet."}
+      <div className="max-w-3xl mx-auto bg-white p-5 rounded-lg shadow-md">
+        <div className="space-y-4">
+          {/* Messages */}
+          <div className="space-y-2 mb-6 max-h-96 overflow-auto">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${message.senderId === user.uid ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-xs p-3 rounded-lg shadow-sm ${
+                    message.senderId === user.uid ? "bg-green-500 text-white" : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  <p className="text-sm">{message.content}</p>
+                  <p className="text-xs text-gray-500">
+                    {message.timestamp.toDate().toLocaleString()}
                   </p>
                 </div>
-              </Link>
-            );
-          })}
+              </div>
+            ))}
+          </div>
+
+          {/* Message Input */}
+          <div className="flex items-center space-x-2">
+            <input
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              className="w-full p-3 rounded-md border border-gray-300"
+              placeholder="Type your message"
+            />
+            <button
+              onClick={sendMessage}
+              className="bg-blue-500 text-white p-3 rounded-md"
+            >
+              Send
+            </button>
+          </div>
         </div>
-      )}
+      </div>
+
+      <div className="mt-8 text-center">
+        <Link href="/engineer/chats" className="text-blue-500">
+          Back to Chats
+        </Link>
+      </div>
     </div>
   );
 }
