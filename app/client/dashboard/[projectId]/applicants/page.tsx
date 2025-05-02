@@ -42,10 +42,16 @@ export default function ApplicantsPage() {
       const withEngineerData = await Promise.all(
         requestSnapshot.docs.map(async (docSnap) => {
           const data = docSnap.data() as Applicant;
+
+          if (!data.engineerId) {
+            return { ...data, name: "Unknown", specialty: "N/A" }; // fallback
+          }
+
           const engineerDoc = await getDoc(doc(db, "engineers", data.engineerId));
           const engineerInfo: EngineerInfo = engineerDoc.exists()
             ? (engineerDoc.data() as EngineerInfo)
             : { name: "Unknown", specialty: "N/A" };
+
           return { ...data, ...engineerInfo };
         })
       );
@@ -99,9 +105,10 @@ export default function ApplicantsPage() {
         </p>
       ) : (
         <div className="space-y-4">
-          {applicants.map((app) => (
-            <div
-              key={app.engineerId}
+          {applicants.map((app, idx) => (
+  <div
+    key={`${app.engineerId || "unknown"}-${idx}`}
+
               className="bg-white p-4 rounded-lg shadow-md"
             >
               <div className="flex justify-between items-center mb-2">

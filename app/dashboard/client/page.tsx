@@ -26,7 +26,6 @@ export default function ClientDashboard() {
   const [user, setUser] = useState<any>(null);
   const [posts, setPosts] = useState<JobPost[]>([]);
 
-  // 1) Watch auth and load only THIS client's posts
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
@@ -35,7 +34,6 @@ export default function ClientDashboard() {
       }
       setUser(currentUser);
 
-      // Query only the posts where clientId === currentUser.uid
       const q = query(
         collection(db, "clientProjects"),
         where("clientId", "==", currentUser.uid)
@@ -51,11 +49,20 @@ export default function ClientDashboard() {
     return () => unsubscribeAuth();
   }, [router]);
 
-  if (!user) return null; // or a loading state
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-[#f0fdf4] text-gray-900 px-6 py-8">
-      <h1 className="text-3xl font-bold text-center mb-8">Your Job Postings</h1>
+      <h1 className="text-3xl font-bold text-center mb-6">Your Job Postings</h1>
+
+      {/* 🆕 Action Buttons */}
+      <div className="flex flex-col sm:flex-row justify-center gap-4 mb-10">
+        <Link href="/client/chats">
+          <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg transition">
+            💬 View Chats
+          </button>
+        </Link>
+      </div>
 
       {/* Job Post Form */}
       <div className="max-w-2xl mx-auto mb-8">
@@ -96,4 +103,3 @@ export default function ClientDashboard() {
     </div>
   );
 }
-

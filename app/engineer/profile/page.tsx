@@ -11,16 +11,19 @@ import {
   getDocs,
   query,
   where,
+  updateDoc,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import ProjectCard from "@/components/ProjectCard";
 import Link from "next/link";
+import { v4 as uuidv4 } from "uuid";
 
 export default function EngineerProfilePage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [projects, setProjects] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
   const [editing, setEditing] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [specialtyInput, setSpecialtyInput] = useState("");
@@ -50,8 +53,18 @@ export default function EngineerProfilePage() {
           id: doc.id,
           ...doc.data(),
         }));
-
         setProjects(userProjects);
+
+        const r = query(
+          collection(db, "collaborationRequests"),
+          where("toEngineerId", "==", currentUser.uid)
+        );
+        const requestSnapshot = await getDocs(r);
+        const requestsData = requestSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setRequests(requestsData);
       } else {
         router.push("/login");
       }
@@ -79,6 +92,51 @@ export default function EngineerProfilePage() {
     }
   };
 
+  const handleAccept = async (request: any) => {
+    const requestRef = doc(db, "collaborationRequests", request.id);
+    await updateDoc(requestRef, { status: "accepted" });
+
+    // Check if chat already exists
+    const chatsRef = collection(db, "projectChats");
+    const existingChats = await getDocs(
+      query(
+        chatsRef,
+        where("projectId", "==", request.projectId),
+        where("engineer1Id", "in", [request.fromEngineerId, request.toEngineerId]),
+        where("engineer2Id", "in", [request.fromEngineerId, request.toEngineerId])
+      )
+    );
+
+    if (!existingChats.empty) {
+      console.log("Chat already exists, skipping creation.");
+    } else {
+      const newChatId = uuidv4();
+      const chatRef = doc(db, "projectChats", newChatId);
+      await setDoc(chatRef, {
+        projectId: request.projectId,
+        engineer1Id: request.fromEngineerId,
+        engineer2Id: request.toEngineerId,
+        createdAt: new Date(),
+        lastMessage: null,
+      });
+    }
+
+    const updatedRequests = requests.map((r) =>
+      r.id === request.id ? { ...r, status: "accepted" } : r
+    );
+    setRequests(updatedRequests);
+  };
+
+  const handleReject = async (request: any) => {
+    const requestRef = doc(db, "collaborationRequests", request.id);
+    await updateDoc(requestRef, { status: "rejected" });
+
+    const updatedRequests = requests.map((r) =>
+      r.id === request.id ? { ...r, status: "rejected" } : r
+    );
+    setRequests(updatedRequests);
+  };
+
   if (!user) return null;
 
   return (
@@ -93,6 +151,7 @@ export default function EngineerProfilePage() {
         </Link>
       </div>
 
+      {/* Profile Information */}
       <div className="bg-white rounded-xl shadow-md p-6 mb-10 space-y-3">
         <h2 className="text-xl font-bold mb-3">Profile Information</h2>
 
@@ -153,6 +212,46 @@ export default function EngineerProfilePage() {
         )}
       </div>
 
+      {/* Collaboration Requests Section */}
+      <div className="bg-white rounded-xl shadow-md p-6 mb-10">
+        <h2 className="text-xl font-bold mb-6">Collaboration Requests</h2>
+        {requests.length === 0 ? (
+          <p className="text-gray-600">No collaboration requests yet.</p>
+        ) : (
+          <div className="space-y-4">
+            {requests.map((request) => (
+              <div
+                key={request.id}
+                className="p-4 border border-gray-200 rounded-md shadow-sm bg-gray-50"
+              >
+                <p className="text-gray-700">
+                  <strong>{request.fromEngineerName}</strong> wants to collaborate on{" "}
+                  <strong>{request.projectTitle}</strong>
+                </p>
+                <p className="text-sm text-gray-500">Status: {request.status || "pending"}</p>
+                {request.status === "pending" && (
+                  <div className="mt-2 flex gap-4">
+                    <button
+                      onClick={() => handleAccept(request)}
+                      className="bg-green-500 text-white px-4 py-1 rounded hover:bg-green-600"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => handleReject(request)}
+                      className="bg-red-500 text-white px-4 py-1 rounded hover:bg-red-600"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Uploaded Projects Section */}
       <div className="bg-white rounded-xl shadow-md p-6">
         <h2 className="text-xl font-bold mb-6">Your Uploaded Projects</h2>
         {projects.length === 0 ? (
@@ -168,4 +267,3 @@ export default function EngineerProfilePage() {
     </div>
   );
 }
-
