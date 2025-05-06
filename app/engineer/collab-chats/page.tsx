@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { auth, db } from "@/firebase/config";
+import { useEffect, useState, useRef } from "react";
+import { auth, db, storage } from "@/firebase/config";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
@@ -16,8 +16,14 @@ import {
   limit,
   Timestamp,
   addDoc,
+  deleteDoc,
 } from "firebase/firestore";
-import { useParams } from "next/navigation"; // ✅ Correct import
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
+} from "firebase/storage";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 
 type Message = {
@@ -25,6 +31,8 @@ type Message = {
   senderId: string;
   content: string;
   timestamp: Timestamp;
+  fileUrl?: string;
+  fileName?: string;
 };
 
 type Chat = {
@@ -44,14 +52,14 @@ export default function CollabChatPage() {
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState<string>("");
+  const [file, setFile] = useState<File | null>(null);
   const [clientInfo, setClientInfo] = useState<User | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // ✅ Safely get chatId from useParams
   const params = useParams();
   const rawChatId = params?.["chatId"];
   const chatIdStr = Array.isArray(rawChatId) ? rawChatId[0] : rawChatId ?? null;
 
-  // ✅ Guard clause
   if (!chatIdStr) {
     if (typeof window !== "undefined") {
       window.location.href = "/engineer/chats";
@@ -67,7 +75,6 @@ export default function CollabChatPage() {
       }
       setUser(currentUser);
 
-      // Fetch chat
       const chatRef = doc(db, "collabChats", chatIdStr);
       const chatDoc = await getDoc(chatRef);
 
@@ -83,11 +90,10 @@ export default function CollabChatPage() {
         participants: chatDoc.data().participants || [],
       });
 
-      // Fetch messages
       const messagesQuery = query(
         collection(db, "collabChats", chatIdStr, "messages"),
         orderBy("timestamp"),
-        limit(50)
+        limit(100)
       );
       const messagesSnapshot = await getDocs(messagesQuery);
       const fetchedMessages = messagesSnapshot.docs.map((doc) => ({
@@ -95,10 +101,11 @@ export default function CollabChatPage() {
         senderId: doc.data().senderId,
         content: doc.data().content,
         timestamp: doc.data().timestamp,
+        fileUrl: doc.data().fileUrl,
+        fileName: doc.data().fileName,
       }));
       setMessages(fetchedMessages);
 
-      // Fetch client info
       const clientRef = doc(db, "users", chatDoc.data().clientId);
       const clientSnapshot = await getDoc(clientRef);
       if (clientSnapshot.exists()) {
@@ -112,30 +119,46 @@ export default function CollabChatPage() {
     return () => unsubscribe();
   }, [chatIdStr]);
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   const sendMessage = async () => {
-    if (newMessage.trim()) {
-      const message: Message = {
-        id: "",
-        senderId: user.uid,
-        content: newMessage,
-        timestamp: Timestamp.now(),
-      };
+    if (!newMessage.trim() && !file) return;
 
-      const messageRef = await addDoc(
-        collection(db, "collabChats", chatIdStr, "messages"),
-        message
-      );
+    let fileUrl = "";
+    let fileName = "";
 
-      await updateDoc(doc(db, "collabChats", chatIdStr), {
-        lastMessage: newMessage,
-        participants: arrayUnion(user.uid),
-      });
-
-      message.id = messageRef.id;
-
-      setNewMessage("");
-      setMessages((prevMessages) => [...prevMessages, message]);
+    if (file) {
+      const fileRef = ref(storage, `chat-files/${chatIdStr}/${Date.now()}-${file.name}`);
+      await uploadBytes(fileRef, file);
+      fileUrl = await getDownloadURL(fileRef);
+      fileName = file.name;
     }
+
+    const messageData: Omit<Message, "id"> = {
+      senderId: user.uid,
+      content: newMessage.trim() || (file ? "(File)" : ""),
+      timestamp: Timestamp.now(),
+      ...(fileUrl && { fileUrl }),
+      ...(fileName && { fileName }),
+    };
+
+    const messageRef = await addDoc(collection(db, "collabChats", chatIdStr, "messages"), messageData);
+
+    await updateDoc(doc(db, "collabChats", chatIdStr), {
+      lastMessage: messageData.content,
+      participants: arrayUnion(user.uid),
+    });
+
+    setMessages((prev) => [...prev, { id: messageRef.id, ...messageData } as Message]);
+    setNewMessage("");
+    setFile(null);
+  };
+
+  const handleDeleteMessage = async (id: string) => {
+    await deleteDoc(doc(db, "collabChats", chatIdStr, "messages", id));
+    setMessages((prev) => prev.filter((msg) => msg.id !== id));
   };
 
   if (!user || !chat || !clientInfo) return null;
@@ -145,44 +168,66 @@ export default function CollabChatPage() {
       <h1 className="text-3xl font-bold text-center mb-8">💬 Collaboration Chat</h1>
 
       <div className="max-w-3xl mx-auto bg-white p-5 rounded-lg shadow-md">
-        <div className="space-y-4">
-          {/* Messages */}
-          <div className="space-y-2 mb-6 max-h-96 overflow-auto">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.senderId === user.uid ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-xs p-3 rounded-lg shadow-sm ${
-                    message.senderId === user.uid ? "bg-green-500 text-white" : "bg-gray-100 text-gray-800"
-                  }`}
-                >
-                  <p className="text-sm">{message.content}</p>
-                  <p className="text-xs text-gray-500">
-                    {message.timestamp.toDate().toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Message Input */}
-          <div className="flex items-center space-x-2">
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              className="w-full p-3 rounded-md border border-gray-300"
-              placeholder="Type your message"
-            />
-            <button
-              onClick={sendMessage}
-              className="bg-blue-500 text-white p-3 rounded-md"
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto mb-4">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${message.senderId === user.uid ? "justify-end" : "justify-start"}`}
             >
-              Send
-            </button>
-          </div>
+              <div
+                className={`relative max-w-xs p-3 rounded-lg shadow-sm ${
+                  message.senderId === user.uid ? "bg-green-500 text-white" : "bg-gray-100 text-gray-800"
+                }`}
+              >
+                <p className="text-sm">{message.content}</p>
+                {message.fileUrl && (
+                  <a
+                    href={message.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-300 underline mt-1 inline-block"
+                  >
+                    📄 {message.fileName || "View File"}
+                  </a>
+                )}
+                <p className="text-[10px] mt-1 text-gray-300">
+                  {message.timestamp.toDate().toLocaleString()}
+                </p>
+                {message.senderId === user.uid && (
+                  <button
+                    onClick={() => handleDeleteMessage(message.id)}
+                    className="absolute top-1 right-2 text-xs text-red-300 hover:text-red-500"
+                  >
+                    ❌
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Message + File input */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            className="w-full p-3 rounded-md border border-gray-300"
+            placeholder="Type your message"
+          />
+          <input
+            type="file"
+            accept="application/pdf"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            className="border border-gray-300 rounded-md p-2 text-sm"
+          />
+          <button
+            onClick={sendMessage}
+            className="bg-blue-500 text-white p-3 rounded-md"
+          >
+            Send
+          </button>
         </div>
       </div>
 
