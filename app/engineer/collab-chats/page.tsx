@@ -1,28 +1,22 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { auth, db, storage } from "@/firebase/config";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
-  getDocs,
-  query,
-  where,
   doc,
   getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  addDoc,
   updateDoc,
   arrayUnion,
-  orderBy,
-  limit,
   Timestamp,
-  addDoc,
   deleteDoc,
 } from "firebase/firestore";
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-} from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 
@@ -54,186 +48,240 @@ export default function CollabChatPage() {
   const [newMessage, setNewMessage] = useState<string>("");
   const [file, setFile] = useState<File | null>(null);
   const [clientInfo, setClientInfo] = useState<User | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const params = useParams();
   const rawChatId = params?.["chatId"];
   const chatIdStr = Array.isArray(rawChatId) ? rawChatId[0] : rawChatId ?? null;
 
+  // redirect if no chatId
   if (!chatIdStr) {
-    if (typeof window !== "undefined") {
-      window.location.href = "/engineer/chats";
-    }
+    if (typeof window !== "undefined") window.location.href = "/engineer/chats";
     return null;
   }
 
+  // Scroll helper
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // Auth + chat metadata + real-time messages
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    let unsubscribeMessages: () => void;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
         window.location.href = "/login";
         return;
       }
       setUser(currentUser);
 
-      const chatRef = doc(db, "collabChats", chatIdStr);
-      const chatDoc = await getDoc(chatRef);
-
-      if (!chatDoc.exists()) {
-        window.location.href = "/engineer/chats";
-        return;
-      }
-
-      setChat({
-        id: chatDoc.id,
-        clientId: chatDoc.data().clientId,
-        projectId: chatDoc.data().projectId,
-        participants: chatDoc.data().participants || [],
-      });
-
-      const messagesQuery = query(
-        collection(db, "collabChats", chatIdStr, "messages"),
-        orderBy("timestamp"),
-        limit(100)
-      );
-      const messagesSnapshot = await getDocs(messagesQuery);
-      const fetchedMessages = messagesSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        senderId: doc.data().senderId,
-        content: doc.data().content,
-        timestamp: doc.data().timestamp,
-        fileUrl: doc.data().fileUrl,
-        fileName: doc.data().fileName,
-      }));
-      setMessages(fetchedMessages);
-
-      const clientRef = doc(db, "users", chatDoc.data().clientId);
-      const clientSnapshot = await getDoc(clientRef);
-      if (clientSnapshot.exists()) {
-        setClientInfo({
-          name: clientSnapshot.data().name,
-          uid: chatDoc.data().clientId,
+      try {
+        // Fetch chat info
+        const chatRef = doc(db, "collabChats", chatIdStr);
+        const chatDoc = await getDoc(chatRef);
+        if (!chatDoc.exists()) {
+          window.location.href = "/engineer/chats";
+          return;
+        }
+        const cdata = chatDoc.data();
+        setChat({
+          id: chatDoc.id,
+          clientId: cdata.clientId,
+          projectId: cdata.projectId,
+          participants: cdata.participants || [],
         });
+
+        // Fetch client info
+        const clientSnap = await getDoc(doc(db, "users", cdata.clientId));
+        if (clientSnap.exists()) {
+          setClientInfo({
+            name: clientSnap.data().name,
+            uid: cdata.clientId,
+          });
+        }
+
+        // Real-time listener
+        const msgsQuery = query(
+          collection(db, "collabChats", chatIdStr, "messages"),
+          orderBy("timestamp")
+        );
+        unsubscribeMessages = onSnapshot(
+          msgsQuery,
+          (snap) => {
+            const fetched: Message[] = snap.docs
+              .filter((d) => !d.metadata.hasPendingWrites)
+              .map((d) => ({
+                id: d.id,
+                senderId: d.data().senderId,
+                content: d.data().content,
+                timestamp: d.data().timestamp,
+                fileUrl: d.data().fileUrl,
+                fileName: d.data().fileName,
+              }));
+            setMessages(fetched);
+            setLoading(false);
+          },
+          (err) => {
+            console.error("Snapshot error:", err);
+            setError("Failed to load messages.");
+            setLoading(false);
+          }
+        );        
+      } catch (e: any) {
+        console.error(e);
+        setError("An error occurred.");
+        setLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeMessages) unsubscribeMessages();
+    };
   }, [chatIdStr]);
 
+  // Auto-scroll on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (!loading) scrollToBottom();
+  }, [messages, loading]);
 
+  // Send text or file message
   const sendMessage = async () => {
     if (!newMessage.trim() && !file) return;
+    setError(null);
 
-    let fileUrl = "";
-    let fileName = "";
+    try {
+      let fileUrl: string | undefined, fileName: string | undefined;
+      if (file) {
+        const storageRef = ref(storage, `chat-files/${chatIdStr}/${Date.now()}-${file.name}`);
+        await uploadBytes(storageRef, file);
+        fileUrl = await getDownloadURL(storageRef);
+        fileName = file.name;
+      }
 
-    if (file) {
-      const fileRef = ref(storage, `chat-files/${chatIdStr}/${Date.now()}-${file.name}`);
-      await uploadBytes(fileRef, file);
-      fileUrl = await getDownloadURL(fileRef);
-      fileName = file.name;
+      const msgData: Omit<Message, "id"> = {
+        senderId: user.uid,
+        content: newMessage.trim() || "(File)",
+        timestamp: Timestamp.now(),
+        ...(fileUrl && { fileUrl }),
+        ...(fileName && { fileName }),
+      };
+
+      await addDoc(collection(db, "collabChats", chatIdStr, "messages"), msgData);
+      await updateDoc(doc(db, "collabChats", chatIdStr), {
+        lastMessage: msgData.content,
+        participants: arrayUnion(user.uid),
+      });
+
+      setNewMessage("");
+      setFile(null);
+    } catch (e: any) {
+      console.error(e);
+      setError("Failed to send message.");
     }
-
-    const messageData: Omit<Message, "id"> = {
-      senderId: user.uid,
-      content: newMessage.trim() || (file ? "(File)" : ""),
-      timestamp: Timestamp.now(),
-      ...(fileUrl && { fileUrl }),
-      ...(fileName && { fileName }),
-    };
-
-    const messageRef = await addDoc(collection(db, "collabChats", chatIdStr, "messages"), messageData);
-
-    await updateDoc(doc(db, "collabChats", chatIdStr), {
-      lastMessage: messageData.content,
-      participants: arrayUnion(user.uid),
-    });
-
-    setMessages((prev) => [...prev, { id: messageRef.id, ...messageData } as Message]);
-    setNewMessage("");
-    setFile(null);
   };
 
+  // Delete own message
   const handleDeleteMessage = async (id: string) => {
-    await deleteDoc(doc(db, "collabChats", chatIdStr, "messages", id));
-    setMessages((prev) => prev.filter((msg) => msg.id !== id));
+    setError(null);
+    try {
+      await deleteDoc(doc(db, "collabChats", chatIdStr, "messages", id));
+    } catch (e: any) {
+      console.error(e);
+      setError("Failed to delete message.");
+    }
   };
 
   if (!user || !chat || !clientInfo) return null;
 
   return (
     <div className="min-h-screen bg-[#f0fdf4] text-gray-900 px-6 py-8">
-      <h1 className="text-3xl font-bold text-center mb-8">💬 Collaboration Chat</h1>
+      <h1 className="text-3xl font-bold text-center mb-4">💬 Collaboration Chat</h1>
+
+      {error && (
+        <div className="max-w-3xl mx-auto mb-4 p-2 bg-red-100 text-red-700 rounded">
+          {error}
+        </div>
+      )}
 
       <div className="max-w-3xl mx-auto bg-white p-5 rounded-lg shadow-md">
-        <div className="space-y-4 max-h-[70vh] overflow-y-auto mb-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.senderId === user.uid ? "justify-end" : "justify-start"}`}
-            >
+        <div className="space-y-2 mb-4 max-h-[60vh] overflow-y-auto">
+          {loading ? (
+            <p className="text-center text-gray-500">Loading messages…</p>
+          ) : (
+            messages.map((message) => (
               <div
-                className={`relative max-w-xs p-3 rounded-lg shadow-sm ${
-                  message.senderId === user.uid ? "bg-green-500 text-white" : "bg-gray-100 text-gray-800"
-                }`}
+                key={message.id}
+                className={`flex ${message.senderId === user.uid ? "justify-end" : "justify-start"}`}
               >
-                <p className="text-sm">{message.content}</p>
-                {message.fileUrl && (
-                  <a
-                    href={message.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-300 underline mt-1 inline-block"
-                  >
-                    📄 {message.fileName || "View File"}
-                  </a>
-                )}
-                <p className="text-[10px] mt-1 text-gray-300">
-                  {message.timestamp.toDate().toLocaleString()}
-                </p>
-                {message.senderId === user.uid && (
-                  <button
-                    onClick={() => handleDeleteMessage(message.id)}
-                    className="absolute top-1 right-2 text-xs text-red-300 hover:text-red-500"
-                  >
-                    ❌
-                  </button>
-                )}
+                <div
+                  className={`relative max-w-xs p-3 rounded-lg shadow-sm ${
+                    message.senderId === user.uid
+                      ? "bg-green-500 text-white"
+                      : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  {message.fileUrl ? (
+                    <a
+                      href={message.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm underline"
+                    >
+                      📄 {message.fileName || "View File"}
+                    </a>
+                  ) : (
+                    <p className="text-sm">{message.content}</p>
+                  )}
+                  <p className="text-[10px] mt-1 text-gray-300">
+                    {message.timestamp.toDate().toLocaleString()}
+                  </p>
+                  {message.senderId === user.uid && (
+                    <button
+                      onClick={() => handleDeleteMessage(message.id)}
+                      className="absolute top-1 right-1 text-xs text-white hover:text-red-400"
+                    >
+                      ✖
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Message + File input */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        {/* Input area */}
+        <div className="flex flex-col sm:flex-row gap-2 items-center">
           <input
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            className="w-full p-3 rounded-md border border-gray-300"
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            className="flex-1 p-3 border border-gray-300 rounded"
             placeholder="Type your message"
           />
           <input
             type="file"
             accept="application/pdf"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="border border-gray-300 rounded-md p-2 text-sm"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="text-sm"
           />
           <button
             onClick={sendMessage}
-            className="bg-blue-500 text-white p-3 rounded-md"
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
           >
             Send
           </button>
         </div>
       </div>
 
-      <div className="mt-8 text-center">
+      <div className="mt-6 text-center">
         <Link href="/engineer/chats" className="text-blue-500">
-          Back to Chats
+          ← Back to Chats
         </Link>
       </div>
     </div>
